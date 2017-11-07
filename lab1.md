@@ -31,18 +31,18 @@ SYSCALL_DEFINE5(mysetnice, pid_t, pid, int, flag, int, nicevalue, void __user *,
         return EFAULT;
     }
     struct task_struct *p;
-    void * my_nice;
-    void * my_prio;
+    int my_nice;
+    int my_prio;
     for_each_process(p) {
         if(p->pid == pid){
             if(flag == 1){
                 set_user_nice(p, nicevalue);
             }
-            *(int*)my_nice = task_nice(p);
-            *(int*)my_prio = task_prio(p);
+            my_nice = task_nice(p);
+            my_prio = task_prio(p);
             // 用户空间与内核空间数据拷贝
-            copy_to_user(prio, my_prio, 8);
-            copy_to_user(nice, my_nice, 8);
+            copy_to_user(prio, &my_prio, sizeof(my_prio));
+            copy_to_user(nice, &my_nice, sizeof(my_nice));
             return 0;
         }
     }
@@ -72,7 +72,7 @@ int main()
     result = syscall(__NR_mysyscall, pid, flag, nicevalue, (void *)&prio, (void *)&nice);
     if (result == 0)
     {
-        printf("pid:%d, flag:%d, nicevalue:%d\n", pid, flag, nicevalue);
+        printf("pid:%d, flag:%d, nicevalue:%d, prio:%d, nice:%d\n", pid, flag, nicevalue, prio, nice);
         return 0;
     }
     printf("some wrong, maybe pid is not exist\n");
