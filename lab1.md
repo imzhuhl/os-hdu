@@ -27,27 +27,58 @@ asmlinkage long sys_mysetnice(pid_t pid, int flag, int nicevalue, void __user *p
 ```c
 SYSCALL_DEFINE5(mysetnice, pid_t, pid, int, flag, int, nicevalue, void __user *, prio, void __user *, nice)
 {
-    if (pid < 0 || (flag != 1 && flag != 0)) {
-        return EFAULT;
-    }
-    if (nice == NULL || prio == NULL) {
+    if(pid < 0 || (flag != 1 && flag != 0)){
         return EFAULT;
     }
     struct task_struct *p;
+    void * my_nice;
+    void * my_prio;
     for_each_process(p) {
-        if (p->pid == pid) {
-            if (flag == 1) {
+        if(p->pid == pid){
+            if(flag == 1){
                 set_user_nice(p, nicevalue);
-                printk("change nice=%d of pid=%d\n", nicevalue, pid);
             }
-            return 0
+            *(int*)my_nice = task_nice(p);
+            *(int*)my_prio = task_prio(p);
+            // 用户空间与内核空间数据拷贝
+            copy_to_user(prio, my_prio, 8);
+            copy_to_user(nice, my_nice, 8);
+            return 0;
         }
     }
     return EFAULT;
-
 }
 ```
 以上完成,就可以编译内核了.
+
+#### 测试代码
+```c
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <stdio.h>
+#define __NR_mysyscall 333
+
+int main()
+{
+    int pid = 0;
+    int flag = 0;
+    int nicevalue = 0;
+    int prio = 0;
+    int nice = 0;
+    int result;
+
+    printf("please input: pid, flag, nicevalue\n");
+    scanf("%d %d %d", &pid, &flag, &nicevalue);
+    result = syscall(__NR_mysyscall, pid, flag, nicevalue, (void *)&prio, (void *)&nice);
+    if (result == 0)
+    {
+        printf("pid:%d, flag:%d, nicevalue:%d\n", pid, flag, nicevalue);
+        return 0;
+    }
+    printf("some wrong, maybe pid is not exist\n");
+    return 0;
+}
+```
 
 #### 解释
 代码解释(linux 源码):
@@ -102,10 +133,10 @@ int task_prio(const struct task_struct *p)
  */
 void set_user_nice(struct task_struct *p, long nice)
 {
-    //省略....
+    // 省略....
     p->static_prio = NICE_TO_PRIO(nice);
     p->prio = effective_prio(p);
-    //省略....
+    // 省略....
 }
 
 // in linux/sched/core.c
@@ -132,6 +163,36 @@ static inline int normal_prio(struct task_struct *p)
 	else
 		prio = __normal_prio(p);
 	return prio;
+}
+
+static inline int task_has_dl_policy(struct task_struct *p)
+{
+    return dl_policy(p->policy);
+}
+static inline int dl_policy(int policy)
+{
+    return policy == SCHED_DEADLINE;
+}
+
+static inline int task_has_rt_policy(struct task_struct *p)
+{
+    return rt_policy(p->policy);
+}
+static inline int rt_policy(int policy)
+{
+    return policy == SCHED_FIFO || policy == SCHED_RR;
+}
+
+static inline int __normal_prio(struct task_struct *p)
+{
+    return p->static_prio;
+}
+
+static inline int rt_prio(int prio)
+{
+    if (unlikely(prio < MAX_RT_PRIO))
+        return 1;
+    return 0;
 }
 ```
 
