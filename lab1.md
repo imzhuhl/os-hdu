@@ -133,6 +133,8 @@ int task_prio(const struct task_struct *p)
  */
 void set_user_nice(struct task_struct *p, long nice)
 {
+    if (task_nice(p) == nice || nice < MIN_NICE || nice > MAX_NICE)
+        return;
     // 省略....
     p->static_prio = NICE_TO_PRIO(nice);
     p->prio = effective_prio(p);
