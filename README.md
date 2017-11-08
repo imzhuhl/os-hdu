@@ -2,5 +2,5 @@
 hdu os lesson
 =============
 
-linux kernel 4.12.10
+linux kernel 4.13.11
 ```
