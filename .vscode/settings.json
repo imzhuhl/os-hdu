@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.action": "properties",
+        "*.filter": "NGINX",
+        "init.h": "c"
+    }
+}
