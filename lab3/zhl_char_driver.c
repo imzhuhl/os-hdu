@@ -60,14 +60,13 @@ module_exit(char_drive_exit);
 
 static int my_open(struct inode *inode, struct file *filp)
 {
-    // some code
+    filp->private_data = zhl_devp;
     printk("mem char drive open\n");
     return 0;
 }
 
 static int my_release(struct inode *inode, struct file *filp)
 {
-    // some code
     printk("mem char drive release\n");
     return 0;
 }
@@ -79,8 +78,43 @@ static int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, un
 
 static ssize_t my_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
 {
+    // 偏移位置, 读取长度
+    unsigned long p = *offp;
+    unsigned int size = count;
+
+    int ret = 0;
+    struct mem_dev *dev = filp->private_data;
+    
+    if (size + p > 512) {
+        return -1;
+    }
+    ret = copy_to_user(buff, (void *)(dev->mem + p), size);
+    if (ret) {
+        return -1;
+    }
+
+    *offp += size;
+    printk("read %d bytes from offset addr %d\n", size, p);
+    return size;
+
 }
 
 static ssize_t my_write(struct file *file, const char __user *buff, size_t count, loff_t *offp)
 {
+    unsigned long p = *offp;
+    unsigned int size = count;
+    int ret = 0;
+    struct mem_dev *dev = filp->private_data;
+
+    if (size + p > 512) {
+        return -1;
+    }
+
+    ret = copy_from_user(dev->mem + p, buff, size);
+    if (ret) {
+        return -1;
+    }
+    *offp += size;
+    printk("written %d bytes from offset addr %d\n", size, p);
+    return size;
 }
