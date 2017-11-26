@@ -51,8 +51,28 @@ void unregister_chrdev_region(dev_t from, unsigned count)
 	}
 }
 
+// file_operations
+struct file_operations {
+	struct module *owner;
+	int (*open) (struct inode *, struct file *);
+	int (*release) (struct inode *, struct file *);
+	loff_t (*llseek) (struct file *, loff_t, int);
+	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
+	// ......
+}
 
 // cdev init, add and delete
+struct cdev {
+	struct kobject kobj;
+	struct module *owner;
+	const struct file_operations *ops;
+	struct list_head list;
+	dev_t dev;
+	unsigned int count;
+};
+
 void cdev_init(struct cdev *cdev, const struct file_operations *fops)
 {
 	memset(cdev, 0, sizeof *cdev);

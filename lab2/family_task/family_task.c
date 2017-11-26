@@ -13,7 +13,9 @@ static int family_task_init(void)
 {
     struct task_struct *own, *parent, *ptr = NULL;
     struct list_head *head, *list_ptr = NULL;
-
+    // 获得 sibling 在 task_struct 中的相对偏移量
+    unsigned long sibling_offset = &((struct task_struct *)0)->sibling;
+    
     for_each_process(own) {
         if(own->pid == pid) {
             printk("This process: comm=%s\t pid=%d\n", own->comm, pid);
@@ -24,7 +26,7 @@ static int family_task_init(void)
             head = &own->children;
             list_ptr = head->next;
             while(list_ptr != head) {
-                ptr = (struct task_struct *)((char *)list_ptr - (unsigned long)(&((struct task_struct *)0)->sibling));
+                ptr = (struct task_struct *)((char *)list_ptr - sibling_offset);
                 printk("children: comm=%s\t pid=%d\n", ptr->comm, ptr->pid);
                 list_ptr = list_ptr->next;
             }
@@ -32,7 +34,7 @@ static int family_task_init(void)
             head = &own->parent->children;
             list_ptr = head->next;
             while(list_ptr != head) {
-                ptr = (struct task_struct *)((char *)list_ptr - (unsigned long)(&((struct task_struct *)0)->sibling));
+                ptr = (struct task_struct *)((char *)list_ptr - sibling_offset);
                 if (ptr->pid != pid) {
                     printk("sibling: comm=%s\t pid=%d\n", ptr->comm, ptr->pid);
                 }

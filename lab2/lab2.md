@@ -42,4 +42,10 @@ struct list_head {
     struct list_head *next, *prev;
 };
 
+/*
+================================================
+
+父进程的 children->next 指向 第一个子进程 的 sibling.
+父进程的 children->prev 指向 最后一个子进程 的 sibling.
+*/
 ```
