@@ -9,3 +9,4 @@ gcc z_pipe.c -lpthread -o z_pipe
 ```
 
 #### 说明
+`pipe_max.c` : 单独用作测试 pipe 大小
