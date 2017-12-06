@@ -9,8 +9,6 @@ gcc msg_queue.c -lpthread -o msg_queue
 ```
 
 #### 说明
-采用 2 个信号量: 写信号量(1)与读信号量(0). 先写后读, 相互阻塞.
-
 线程相关函数:
 
 ```c
@@ -18,3 +16,7 @@ pthread_create
 pthread_join
 pthread_exit
 ```
+
+1. 写线程先 sleep 10 秒，期间测试消息队列的异步能力。
+2. 可以进行队列容量测试，写线程的处去掉 `memset` 函数处注释，然后注释上一句 `scanf` 即可。
+3. 添加了 `Ctrl c` 或 `∧ c` 程序终止信号的处理，2 的容量测试需要手动终止。
