@@ -58,10 +58,6 @@ int main(void)
 
     read_from_pipe(fd);
 
-    close(fd[1]);
-    memset(buffer, '\0', 64);
-    ret = read(fd[0], buffer, 64);
-    printf("father read %d bytes data: %s\n", ret, buffer);
     sem_unlink(SEM_W);
     sem_unlink(SEM_R);
     sem_unlink(SEM_ER);
