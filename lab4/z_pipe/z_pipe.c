@@ -1,78 +1,79 @@
-#include <fcntl.h>
+#include <stdio.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define SEM_W "sem_write"
 #define SEM_R "sem_read"
 #define SEM_ER "sem_enable_read"
 #define ENABLE_NUM 3
 
-void write_to_pipe(int fd[2]);
+void write_to_pipe(int fd[2], int sid);
 int read_from_pipe(int fd[2]);
+void P(sem_t *sem_ptr);
+void V(sem_t *sem_ptr);
+void catch_INT(int sig);
+void destroy_sem();
 
 int main(void)
 {
     int fd[2];
     pid_t pid;
-    char buffer[64];
-    int ret = -1, child_num = ENABLE_NUM, write_val = -1;
+    int ret = -1, child_num = ENABLE_NUM, enable_val = -1, sid = 0, i;
     sem_t *write_psx, *read_psx, *enable_read_psx;
     write_psx = sem_open(SEM_W, O_CREAT, 0666, 1);
     read_psx = sem_open(SEM_R, O_CREAT, 0666, 0);
-    enable_read_psx = sem_open(SEM_ER, O_CREAT, 0666, 0);
+    //enable_read_psx = sem_open(SEM_ER, O_CREAT, 0666, 0);
 
     if (pipe(fd) < 0) {
         printf("pipe error\n");
         exit(1);
     }
-    while (child_num > 0) {
+    for (i = 0; i < child_num; i++) {
         pid = fork();
+        sid++;
         if (pid < 0) {
             printf("fork error\n");
-            exit(1);
-        } else if (pid == 0) { // child process
-            sem_wait(write_psx);
-
-            write_to_pipe(fd);
-
-            sem_post(enable_read_psx);
-            sem_getvalue(enable_read_psx, &write_val);
-            if (write_val == ENABLE_NUM) {
-                sem_post(read_psx);
-            }
-
-            sem_post(write_psx);
+            destroy_sem();
             exit(0);
-        } else { // father process
-            child_num--;
+        } else if (pid == 0) { // child process
+            break;
         }
     }
-    // only father could reach here
-    sem_wait(read_psx);
+    if (pid == 0) {
+        P(write_psx);
+        write_to_pipe(fd, sid);
 
-    read_from_pipe(fd);
+        V(read_psx);
+        V(write_psx);
+        exit(0);
 
-    sem_unlink(SEM_W);
-    sem_unlink(SEM_R);
-    sem_unlink(SEM_ER);
+    } else {
+        // only father could reach here
+        signal(SIGINT, catch_INT);
+        //sleep(1);
+        while (1)
+        {
+            P(read_psx);
+            read_from_pipe(fd);
+        }
+    }
     return 0;
 }
 
-void write_to_pipe(int fd[2])
+void write_to_pipe(int fd[2], int sid)
 {
-    int value, ret = -1;
+    int value;
+    char buf[100];
     close(fd[0]);
-    char buf[1024];
-    memset(buf, '*', 1024);
-    buf[1023] = '$';
-    ret = write(fd[1], buf, sizeof(buf));
-    printf("child write %d bytes data\n", ret);
+    memset(buf, sid + '0', 100);
+    printf("child proc %d write %d bytes data\n", sid, (int)sizeof(buf));
+    write(fd[1], buf, sizeof(buf));
 }
 
 int read_from_pipe(int fd[2])
@@ -87,5 +88,29 @@ int read_from_pipe(int fd[2])
         memset(buf, '\0', 1024);
         ret = read(fd[0], buf, 1024);
     }
-    return 0;
+    return ret;
+}
+
+void P(sem_t *sem_ptr)
+{
+    sem_wait(sem_ptr);
+}
+
+void V(sem_t *sem_ptr)
+{
+    sem_post(sem_ptr);
+}
+
+void catch_INT(int sig)
+{
+    printf("catch ctrl_c keydown\n");
+    destroy_sem();
+    exit(0);
+}
+
+void destroy_sem()
+{
+    sem_unlink(SEM_W);
+    sem_unlink(SEM_R);
+    //sem_unlink(SEM_ER);
 }
