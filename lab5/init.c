@@ -4,11 +4,11 @@ char* FILENAME = "zfilesys";
 
 void startsys()
 {
-    /*
-	如果存在文件系统（存在 FILENAME 这个文件 且 开头为魔数）则
-	将 root 目录载入打开文件表。
-	否则，调用 my_format 创建文件系统，再载入。
-	*/
+    /**
+	 * 如果存在文件系统（存在 FILENAME 这个文件 且 开头为魔数）则
+	 * 将 root 目录载入打开文件表。
+	 * 否则，调用 my_format 创建文件系统，再载入。
+	 */
     myvhard = (unsigned char*)malloc(SIZE);
     FILE* file;
     if ((file = fopen(FILENAME, "r")) != NULL) {
@@ -53,9 +53,9 @@ void startsys()
 
 void exitsys()
 {
-    /*
-	依次关闭 打开文件。 写入 FILENAME 文件
-	*/
+    /**
+	 * 依次关闭 打开文件。 写入 FILENAME 文件
+	 */
     while (currfd) {
         my_close(currfd);
     }
@@ -66,12 +66,12 @@ void exitsys()
 
 void my_format()
 {
-    /*
-	初始化前五个磁盘块
-	设定第六个磁盘块为根目录磁盘块
-	初始化 root 目录： 创建 . 和 .. 目录
-	写入 FILENAME 文件 （写入磁盘空间）
-	*/
+    /**
+	 * 初始化前五个磁盘块
+	 * 设定第六个磁盘块为根目录磁盘块
+	 * 初始化 root 目录： 创建 . 和 .. 目录
+	 * 写入 FILENAME 文件 （写入磁盘空间）
+	 */
     block0* boot = (block0*)myvhard;
     strcpy(boot->magic_number, "10101010");
     strcpy(boot->information, "fat file system");
@@ -136,7 +136,7 @@ void my_ls()
 
     // 遍历当前目录 fcb
     fcb* fcbptr = (fcb*)buf;
-    for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++) {
+    for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); fcbptr++) {
         if (fcbptr->free == 1) {
             if (fcbptr->attribute == 0) {
                 printf("<DIR> %-8s\t%d/%d/%d %d:%d\n",
@@ -156,25 +156,24 @@ void my_ls()
                     (fcbptr->time >> 5) & 0x003f,
                     fcbptr->length);
             }
+            i++;
         }
-        fcbptr++;
     }
 }
 
 void my_mkdir(char* dirname)
 {
-    /*
-	当前目录：当前打开目录项表示的目录
-	该目录：以下指创建的目录
-	父目录：指该目录的父目录
-	如:
-	我现在在 root 目录下， 输入命令 mkdir a/b/bb
-	表示 在 root 目录下的 a 目录下的 b 目录中创建 bb 目录
-	这时，父目录指 b，该目录指 bb，当前目录指 root
-	以下都用这个表达，简单情况下，当前目录和父目录是一个目录
-
-	来不及了，先讨论简单情况，即 mkdir bb
-	*/
+    /**
+	 * 当前目录：当前打开目录项表示的目录
+	 * 该目录：以下指创建的目录
+	 * 父目录：指该目录的父目录
+	 * 如:
+	 * 我现在在 root 目录下， 输入命令 mkdir a/b/bb
+	 * 表示 在 root 目录下的 a 目录下的 b 目录中创建 bb 目录
+     * 这时，父目录指 b，该目录指 bb，当前目录指 root
+	 * 以下都用这个表达，简单情况下，当前目录和父目录是一个目录
+	 * 来不及了，先讨论简单情况，即 mkdir bb
+	 */
     int i = 0;
     char text[MAX_TEXT_SIZE];
 
@@ -274,11 +273,11 @@ void my_mkdir(char* dirname)
     do_write(fd, (char*)fcbtmp2, sizeof(fcb), 2);
 
     // 关闭该目录的打开文件表项，close 会修改父目录中对应该目录的 fcb 信息
-    /*
-	这里注意，一个目录存在 2 个 fcb 信息，一个为该目录下的 . 目录文件，一个为父目录下的 fcb。
-	因此，这俩个fcb均需要修改，前一个 fcb 由各个函数自己完成，后一个 fcb 修改由 close 完成。
-	所以这里，需要打开文件表，再关闭文件表，实际上更新了后一个 fcb 信息。
-	*/
+    /**
+	 * 这里注意，一个目录存在 2 个 fcb 信息，一个为该目录下的 . 目录文件，一个为父目录下的 fcb。
+	 * 因此，这俩个fcb均需要修改，前一个 fcb 由各个函数自己完成，后一个 fcb 修改由 close 完成。
+	 * 所以这里，需要打开文件表，再关闭文件表，实际上更新了后一个 fcb 信息。
+	 */
     my_close(fd);
 
     free(fcbtmp);
@@ -381,7 +380,11 @@ int my_create(char* filename)
     int i;
     fcb* fcbptr = (fcb*)buf;
     // 检查重名
-    for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++, fcbptr++) {
+    for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); fcbptr++) {
+        if (fcbptr->free == 0) {
+            continue;
+        }
+        i++;
         if (strcmp(fcbptr->filename, filename) == 0 && fcbptr->attribute == 1) {
             printf("the same filename error\n");
             return -1;
@@ -414,12 +417,13 @@ int my_create(char* filename)
     fcbptr->free = 1;
     fcbptr->attribute = 1;
     fcbptr->length = 0;
+
+    openfilelist[currfd].length += sizeof(fcb);
     openfilelist[currfd].count = i * sizeof(fcb);
     do_write(currfd, (char*)fcbptr, sizeof(fcb), 2);
 
     // 修改父目录 fcb
     fcbptr = (fcb*)buf;
-    // openfilelist[currfd].length += sizeof(fcb);
     fcbptr->length = openfilelist[currfd].length;
     openfilelist[currfd].count = 0;
     do_write(currfd, (char*)fcbptr, sizeof(fcb), 2);
