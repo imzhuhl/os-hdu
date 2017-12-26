@@ -18,6 +18,7 @@
 
 #define SEM_SEND "sem_send"
 #define SEM_RECV "sem_recv"
+#define SEM_FIN  "sem_final"
 
 void P(sem_t *semp);
 void V(sem_t *semp);
