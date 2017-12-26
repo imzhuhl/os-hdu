@@ -136,7 +136,7 @@ void my_ls()
 
     // 遍历当前目录 fcb
     fcb* fcbptr = (fcb*)buf;
-    for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); fcbptr++) {
+    for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++, fcbptr++) {
         if (fcbptr->free == 1) {
             if (fcbptr->attribute == 0) {
                 printf("<DIR> %-8s\t%d/%d/%d %d:%d\n",
@@ -156,7 +156,6 @@ void my_ls()
                     (fcbptr->time >> 5) & 0x003f,
                     fcbptr->length);
             }
-            i++;
         }
     }
 }
@@ -307,6 +306,8 @@ void my_rmdir(char* dirname)
     // 查找要删除的目录
     fcb* fcbptr = (fcb*)buf;
     for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++, fcbptr++) {
+        if (fcbptr->free == 0)
+            continue;
         if (strcmp(fcbptr->filename, dirname) == 0 && fcbptr->attribute == 0) {
             tag = 1;
             break;
@@ -350,9 +351,13 @@ void my_rmdir(char* dirname)
 
     openfilelist[currfd].count = i * sizeof(fcb);
     do_write(currfd, (char*)fcbptr, sizeof(fcb), 2);
+    
+    // 
+    if ((i + 1) * sizeof(fcb) == openfilelist[currfd].length) {
+        openfilelist[currfd].length -= sizeof(fcb);
+    }
 
     // 更新父目录 fcb
-    openfilelist[currfd].length -= sizeof(fcb);
     fcbptr = (fcb*)buf;
     fcbptr->length = openfilelist[currfd].length;
     openfilelist[currfd].count = 0;
@@ -380,11 +385,10 @@ int my_create(char* filename)
     int i;
     fcb* fcbptr = (fcb*)buf;
     // 检查重名
-    for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); fcbptr++) {
+    for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++, fcbptr++) {
         if (fcbptr->free == 0) {
             continue;
         }
-        i++;
         if (strcmp(fcbptr->filename, filename) == 0 && fcbptr->attribute == 1) {
             printf("the same filename error\n");
             return -1;
@@ -418,7 +422,6 @@ int my_create(char* filename)
     fcbptr->attribute = 1;
     fcbptr->length = 0;
 
-    openfilelist[currfd].length += sizeof(fcb);
     openfilelist[currfd].count = i * sizeof(fcb);
     do_write(currfd, (char*)fcbptr, sizeof(fcb), 2);
 
@@ -439,6 +442,7 @@ void my_rm(char* filename)
 
     int i, flag = 0;
     fcb* fcbptr = (fcb*)buf;
+    // 重名查询
     for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++, fcbptr++) {
         if (strcmp(fcbptr->filename, filename) == 0 && fcbptr->attribute == 1) {
             flag = 1;
@@ -450,6 +454,7 @@ void my_rm(char* filename)
         return;
     }
 
+    // 更新 fat 表
     int block_num = fcbptr->first;
     fat* fat1 = (fat*)(myvhard + BLOCKSIZE);
     int nxt_num = 0;
@@ -461,11 +466,11 @@ void my_rm(char* filename)
         else
             break;
     }
-
     fat1 = (fat*)(myvhard + BLOCKSIZE);
     fat* fat2 = (fat*)(myvhard + BLOCKSIZE * 3);
     memcpy(fat2, fat1, BLOCKSIZE * 2);
 
+    // 清空 fcb
     fcbptr->date = 0;
     fcbptr->time = 0;
     fcbptr->exname[0] = '\0';
@@ -475,7 +480,12 @@ void my_rm(char* filename)
     fcbptr->length = 0;
     openfilelist[currfd].count = i * sizeof(fcb);
     do_write(currfd, (char*)fcbptr, sizeof(fcb), 2);
+    // 
+    if ((i + 1) * sizeof(fcb) == openfilelist[currfd].length) {
+        openfilelist[currfd].length -= sizeof(fcb);
+    }
 
+    // 修改父目录 . 目录文件的 fcb
     openfilelist[currfd].length -= sizeof(fcb);
     fcbptr = (fcb*)buf;
     fcbptr->length = openfilelist[currfd].length;
@@ -493,6 +503,7 @@ int my_open(char* filename)
 
     int i, flag = 0;
     fcb* fcbptr = (fcb*)buf;
+    // 重名检查
     for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++, fcbptr++) {
         if (strcmp(fcbptr->filename, filename) == 0 && fcbptr->attribute == 1) {
             flag = 1;
@@ -504,6 +515,7 @@ int my_open(char* filename)
         return -1;
     }
 
+    // 申请新的打开目录项并初始化该目录项
     int fd = get_free_openfilelist();
     if (fd == -1) {
         printf("my_open: full openfilelist\n");
@@ -554,6 +566,7 @@ void my_cd(char* dirname)
         printf("my_cd: no such dir\n");
         return;
     } else {
+        // . 和 .. 检查
         if (strcmp(fcbptr->filename, ".") == 0) {
             return;
         } else if (strcmp(fcbptr->filename, "..") == 0) {
@@ -565,6 +578,7 @@ void my_cd(char* dirname)
                 return;
             }
         } else {
+            // 其他目录
             fd = get_free_openfilelist();
             if (fd == -1) {
                 return;
