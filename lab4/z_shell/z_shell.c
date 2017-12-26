@@ -26,23 +26,19 @@ void z_fork(int cmd_id)
         exit(0);
     } else if (pid == 0) {
         // child task
-        int execl_status = -1;
         switch (cmd_id) {
         case 1:
-            execl_status = execl("./cmd1", "", NULL);
+            execl("./cmd1", "", NULL);
             break;
         case 2:
-            execl_status = execl("./cmd2", "", NULL);
+            execl("./cmd2", "", NULL);
             break;
         case 3:
-            execl_status = execl("./cmd3", "", NULL);
+            execl("./cmd3", "", NULL);
             break;
         }
-        if (execl_status < 0) {
-            printf("execl error\n");
-            exit(0);
-        }
-        printf("child finish\n");
+        // error area
+        printf("execl error\n");
         exit(0);
     } else {
         return;
