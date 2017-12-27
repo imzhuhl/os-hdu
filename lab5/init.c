@@ -5,7 +5,7 @@ char* FILENAME = "zfilesys";
 void startsys()
 {
     /**
-	 * 如果存在文件系统（存在 FILENAME 这个文件 且 开头为魔数）则
+     * 如果存在文件系统（存在 FILENAME 这个文件 且 开头为魔数）则
 	 * 将 root 目录载入打开文件表。
 	 * 否则，调用 my_format 创建文件系统，再载入。
 	 */
@@ -351,10 +351,20 @@ void my_rmdir(char* dirname)
 
     openfilelist[currfd].count = i * sizeof(fcb);
     do_write(currfd, (char*)fcbptr, sizeof(fcb), 2);
-    
-    // 
-    if ((i + 1) * sizeof(fcb) == openfilelist[currfd].length) {
+
+    // 删除目录需要相应考虑可能删除 fcb，也就是修改父目录 length
+    // 这里需要注意：因为删除中间的 fcb，目录有效长度不变，即 length 不变
+    // 因此需要考虑特殊情况，即删除最后一个 fcb 时，极有可能之前的 fcb 都是空的，这是需要
+    // 循环删除 fcb (以下代码完成)，可能需要回收 block 修改 fat 表等过程(do_write 完成)
+    int lognum = i;
+    if ((lognum + 1) * sizeof(fcb) == openfilelist[currfd].length) {
         openfilelist[currfd].length -= sizeof(fcb);
+        lognum--;
+        fcbptr = (fcb *)buf + lognum;
+        while (fcbptr->free == 0) {
+            fcbptr--;
+            openfilelist[currfd].length -= sizeof(fcb);
+        }
     }
 
     // 更新父目录 fcb
@@ -480,9 +490,16 @@ void my_rm(char* filename)
     fcbptr->length = 0;
     openfilelist[currfd].count = i * sizeof(fcb);
     do_write(currfd, (char*)fcbptr, sizeof(fcb), 2);
-    // 
-    if ((i + 1) * sizeof(fcb) == openfilelist[currfd].length) {
+    //
+    int lognum = i;
+    if ((lognum + 1) * sizeof(fcb) == openfilelist[currfd].length) {
         openfilelist[currfd].length -= sizeof(fcb);
+        lognum--;
+        fcbptr = (fcb *)buf + lognum;
+        while (fcbptr->free == 0) {
+            fcbptr--;
+            openfilelist[currfd].length -= sizeof(fcb);
+        }
     }
 
     // 修改父目录 . 目录文件的 fcb
@@ -556,9 +573,10 @@ void my_cd(char* dirname)
     do_read(currfd, openfilelist[currfd].length, buf);
 
     fcb* fcbptr = (fcb*)buf;
+    // 查找目标 fcb
     for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++, fcbptr++) {
         if (strcmp(fcbptr->filename, dirname) == 0 && fcbptr->attribute == 0) {
-            tag = 1; // find the dir
+            tag = 1;
             break;
         }
     }
@@ -639,6 +657,7 @@ int my_close(int fd)
         openfilelist[father_fd].count = openfilelist[fd].diroff * sizeof(fcb);
         do_write(father_fd, (char*)fcbptr, sizeof(fcb), 2);
     }
+    // 释放打开文件表
     memset(&openfilelist[fd], 0, sizeof(useropen));
     currfd = father_fd;
     return father_fd;
@@ -666,6 +685,9 @@ int my_write(int fd)
     }
     int wstyle;
     while (1) {
+        // 1: 截断写，清空全部内容，从头开始写
+        // 2. 覆盖写，从文件指针处开始写
+        // 3. 追加写，字面意思
         printf("1:Truncation  2:Coverage  3:Addition\n");
         scanf("%d", &wstyle);
         if (wstyle > 3 || wstyle < 1) {
@@ -676,7 +698,7 @@ int my_write(int fd)
     }
     char text[MAX_TEXT_SIZE] = "\0";
     char texttmp[MAX_TEXT_SIZE] = "\0";
-    printf("please input data, line feed + Ctrl + z to end file\n");
+    printf("please input data, line feed + $$ to end file\n");
     getchar();
     while (gets(texttmp)) {
         if (strcmp(texttmp, "$$") == 0) {
@@ -705,6 +727,7 @@ int do_read(int fd, int len, char* text)
     int block_num = openfilelist[fd].first;
     fat* fatptr = (fat*)(myvhard + BLOCKSIZE) + block_num;
 
+    // 定位读取目标磁盘块和块内地址
     while (off >= BLOCKSIZE) {
         off -= BLOCKSIZE;
         block_num = fatptr->id;
@@ -718,6 +741,7 @@ int do_read(int fd, int len, char* text)
     unsigned char* blockptr = myvhard + BLOCKSIZE * block_num;
     memcpy(buf, blockptr, BLOCKSIZE);
 
+    // 读取内容
     while (len > 0) {
         if (BLOCKSIZE - off > len) {
             memcpy(textptr, buf + off, len);
@@ -758,6 +782,7 @@ int do_write(int fd, char* text, int len, char wstyle)
         openfilelist[fd].count = 0;
         openfilelist[fd].length = 0;
     } else if (wstyle == 3) {
+        // 追加写，如果是一般文件，则需要先删除末尾 \0，即将指针移到末位减一个字节处
         openfilelist[fd].count = openfilelist[fd].length;
         if (openfilelist[fd].attribute == 1) {
             openfilelist[fd].count = openfilelist[fd].length - 1;
@@ -766,6 +791,7 @@ int do_write(int fd, char* text, int len, char wstyle)
 
     int off = openfilelist[fd].count;
 
+    // 定位磁盘块和块内偏移量
     while (off >= BLOCKSIZE) {
         block_num = fatptr->id;
         if (block_num == END) {
@@ -777,6 +803,7 @@ int do_write(int fd, char* text, int len, char wstyle)
     }
 
     blockptr = (unsigned char*)(myvhard + BLOCKSIZE * block_num);
+    // 写入磁盘
     while (len > lentmp) {
         memcpy(buf, blockptr, BLOCKSIZE);
         for (; off < BLOCKSIZE; off++) {
@@ -786,9 +813,9 @@ int do_write(int fd, char* text, int len, char wstyle)
             if (len == lentmp)
                 break;
         }
-        // write to block
         memcpy(blockptr, buf, BLOCKSIZE);
 
+        // 写入的内容太多，需要写到下一个磁盘块，如果没有磁盘块，就申请一个
         if (off == BLOCKSIZE && len != lentmp) {
             off = 0;
             block_num = fatptr->id;
@@ -813,17 +840,27 @@ int do_write(int fd, char* text, int len, char wstyle)
     if (openfilelist[fd].count > openfilelist[fd].length)
         openfilelist[fd].length = openfilelist[fd].count;
 
-    while (1) {
-        if (fatptr->id != END) {
-            i = fatptr->id;
-            fatptr->id = FREE;
-            fatptr = (fat*)(myvhard + BLOCKSIZE) + i;
-        } else {
-            break;
+    // 删除多余的磁盘块
+    if (wstyle == 1 || (wstyle == 2 && openfilelist[fd].attribute == 0)) {
+        off = openfilelist[fd].length;
+        fatptr = (fat *)(myvhard + BLOCKSIZE) + openfilelist[fd].first;
+        while (off >= BLOCKSIZE) {
+            block_num = fatptr->id;
+            off -= BLOCKSIZE;
+            fatptr = (fat *)(myvhard + BLOCKSIZE) + block_num;
         }
+        while (1) {
+            if (fatptr->id != END) {
+                i = fatptr->id;
+                fatptr->id = FREE;
+                fatptr = (fat *)(myvhard + BLOCKSIZE) + i;
+            } else {
+                break;
+            }
+        }
+        fatptr = (fat *)(myvhard + BLOCKSIZE) + block_num;
+        fatptr->id = END;
     }
-    fatptr = (fat*)(myvhard + BLOCKSIZE) + block_num;
-    fatptr->id = END;
 
     memcpy((fat*)(myvhard + BLOCKSIZE * 3), (fat*)(myvhard + BLOCKSIZE), BLOCKSIZE * 2);
     return len;
