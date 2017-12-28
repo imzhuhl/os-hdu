@@ -503,7 +503,6 @@ void my_rm(char* filename)
     }
 
     // 修改父目录 . 目录文件的 fcb
-    openfilelist[currfd].length -= sizeof(fcb);
     fcbptr = (fcb*)buf;
     fcbptr->length = openfilelist[currfd].length;
     openfilelist[currfd].count = 0;
@@ -785,7 +784,10 @@ int do_write(int fd, char* text, int len, char wstyle)
         // 追加写，如果是一般文件，则需要先删除末尾 \0，即将指针移到末位减一个字节处
         openfilelist[fd].count = openfilelist[fd].length;
         if (openfilelist[fd].attribute == 1) {
-            openfilelist[fd].count = openfilelist[fd].length - 1;
+            if (openfilelist[fd].length != 0) {
+                // 非空文件
+                openfilelist[fd].count = openfilelist[fd].length - 1;
+            }
         }
     }
 
@@ -855,6 +857,7 @@ int do_write(int fd, char* text, int len, char wstyle)
                 fatptr->id = FREE;
                 fatptr = (fat *)(myvhard + BLOCKSIZE) + i;
             } else {
+                fatptr->id = FREE;
                 break;
             }
         }
