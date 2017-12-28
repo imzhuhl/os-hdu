@@ -80,12 +80,12 @@ void *send_thread(void *arg)
 
 void *recv_thread(void *arg)
 {
-    sleep(10);
+    // sleep(10);
     struct msgbuf r_msg;
     r_msg.mtype = 1;
     while (1) {
         P(&recv_psx);
-
+        sleep(2);
         msgrcv(msgid, &r_msg, sizeof(struct msgbuf), 1, 0);
         if (strcmp(r_msg.mtext, "end") == 0) {
             strcpy(r_msg.mtext, "over");
