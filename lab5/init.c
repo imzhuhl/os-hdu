@@ -329,7 +329,7 @@ void my_rmdir(char* dirname)
     int nxt_num = 0;
     while (1) {
         nxt_num = fat1[block_num].id;
-        fat1[block_num].id = END;
+        fat1[block_num].id = FREE;
         if (nxt_num != END) {
             block_num = nxt_num;
         } else {
@@ -452,7 +452,7 @@ void my_rm(char* filename)
 
     int i, flag = 0;
     fcb* fcbptr = (fcb*)buf;
-    // 重名查询
+    // 查询
     for (i = 0; i < (int)(openfilelist[currfd].length / sizeof(fcb)); i++, fcbptr++) {
         if (strcmp(fcbptr->filename, filename) == 0 && fcbptr->attribute == 1) {
             flag = 1;
